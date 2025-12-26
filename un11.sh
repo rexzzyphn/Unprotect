@@ -1,0 +1,177 @@
+#!/bin/bash
+
+REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/MountController.php"
+
+echo "🚀 Menghapus proteksi Anti Intip Mounts..."
+
+# Buat direktori jika belum ada
+mkdir -p "$(dirname "$REMOTE_PATH")"
+
+# Tulis ulang file PHP
+cat <<'PHP' > "$REMOTE_PATH"
+<?php
+
+namespace Pterodactyl\Http\Controllers\Admin;
+
+use Ramsey\Uuid\Uuid;
+use Illuminate\View\View;
+use Illuminate\Http\Request;
+use Pterodactyl\Models\Nest;
+use Illuminate\Http\Response;
+use Pterodactyl\Models\Mount;
+use Pterodactyl\Models\Location;
+use Illuminate\Http\RedirectResponse;
+use Prologue\Alerts\AlertsMessageBag;
+use Illuminate\View\Factory as ViewFactory;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Http\Requests\Admin\MountFormRequest;
+use Pterodactyl\Repositories\Eloquent\MountRepository;
+use Pterodactyl\Contracts\Repository\NestRepositoryInterface;
+use Pterodactyl\Contracts\Repository\LocationRepositoryInterface;
+
+class MountController extends Controller
+{
+    /**
+     * MountController constructor.
+     */
+    public function __construct(
+        protected AlertsMessageBag $alert,
+        protected NestRepositoryInterface $nestRepository,
+        protected LocationRepositoryInterface $locationRepository,
+        protected MountRepository $repository,
+        protected ViewFactory $view
+    ) {
+    }
+
+    /**
+     * Return the mount overview page.
+     */
+    public function index(): View
+    {
+        return $this->view->make('admin.mounts.index', [
+            'mounts' => $this->repository->getAllWithDetails(),
+        ]);
+    }
+
+    /**
+     * Return the mount view page.
+     */
+    public function view(string $id): View
+    {
+        $nests = Nest::query()->with('eggs')->get();
+        $locations = Location::query()->with('nodes')->get();
+
+        return $this->view->make('admin.mounts.view', [
+            'mount' => $this->repository->getWithRelations($id),
+            'nests' => $nests,
+            'locations' => $locations,
+        ]);
+    }
+
+    /**
+     * Handle request to create new mount.
+     */
+    public function create(MountFormRequest $request): RedirectResponse
+    {
+        $model = (new Mount())->fill($request->validated());
+        $model->forceFill(['uuid' => Uuid::uuid4()->toString()]);
+
+        $model->saveOrFail();
+        $mount = $model->fresh();
+
+        $this->alert->success('Mount was created successfully.')->flash();
+
+        return redirect()->route('admin.mounts.view', $mount->id);
+    }
+
+    /**
+     * Handle request to update or delete mount.
+     */
+    public function update(MountFormRequest $request, Mount $mount): RedirectResponse
+    {
+        if ($request->input('action') === 'delete') {
+            return $this->delete($mount);
+        }
+
+        $mount->forceFill($request->validated())->save();
+
+        $this->alert->success('Mount was updated successfully.')->flash();
+
+        return redirect()->route('admin.mounts.view', $mount->id);
+    }
+
+    /**
+     * Delete a mount from the system.
+     */
+    public function delete(Mount $mount): RedirectResponse
+    {
+        $mount->delete();
+
+        return redirect()->route('admin.mounts');
+    }
+
+    /**
+     * Adds eggs to the mount.
+     */
+    public function addEggs(Request $request, Mount $mount): RedirectResponse
+    {
+        $validatedData = $request->validate([
+            'eggs' => 'required|exists:eggs,id',
+        ]);
+
+        $eggs = $validatedData['eggs'] ?? [];
+        if (count($eggs) > 0) {
+            $mount->eggs()->attach($eggs);
+        }
+
+        $this->alert->success('Mount was updated successfully.')->flash();
+
+        return redirect()->route('admin.mounts.view', $mount->id);
+    }
+
+    /**
+     * Adds nodes to the mount.
+     */
+    public function addNodes(Request $request, Mount $mount): RedirectResponse
+    {
+        $data = $request->validate(['nodes' => 'required|exists:nodes,id']);
+
+        $nodes = $data['nodes'] ?? [];
+        if (count($nodes) > 0) {
+            $mount->nodes()->attach($nodes);
+        }
+
+        $this->alert->success('Mount was updated successfully.')->flash();
+
+        return redirect()->route('admin.mounts.view', $mount->id);
+    }
+
+    /**
+     * Deletes an egg from the mount.
+     */
+    public function deleteEgg(Mount $mount, int $egg_id): Response
+    {
+        $mount->eggs()->detach($egg_id);
+
+        return response('', 204);
+    }
+
+    /**
+     * Deletes a node from the mount.
+     */
+    public function deleteNode(Mount $mount, int $node_id): Response
+    {
+        $mount->nodes()->detach($node_id);
+
+        return response('', 204);
+    }
+}
+PHP
+
+# Permission
+chmod 755 "$(dirname "$REMOTE_PATH")"
+chmod 644 "$REMOTE_PATH"
+
+echo "✅ Proteksi Anti Intip Mounts berhasil di hapus!"
+echo "📂 Lokasi file: $REMOTE_PATH"
+echo "🔒 Berhasil 100%."
