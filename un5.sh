@@ -4,9 +4,11 @@ REMOTE_PATH="/var/www/pterodactyl/app/Http/Controllers/Admin/Nests/NestControlle
 
 echo "🚀 Menghapus proteksi Anti Akses Nest..."
 
+# Pastikan folder ada
 mkdir -p "$(dirname "$REMOTE_PATH")"
 chmod 755 "$(dirname "$REMOTE_PATH")"
 
+# Timpa file dengan versi ORIGINAL (tanpa proteksi apa pun)
 cat > "$REMOTE_PATH" << 'EOF'
 <?php
 
@@ -25,9 +27,6 @@ use Pterodactyl\Http\Requests\Admin\Nest\StoreNestFormRequest;
 
 class NestController extends Controller
 {
-    /**
-     * NestController constructor.
-     */
     public function __construct(
         protected AlertsMessageBag $alert,
         protected NestCreationService $nestCreationService,
@@ -38,11 +37,6 @@ class NestController extends Controller
     ) {
     }
 
-    /**
-     * Render nest listing page.
-     *
-     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
-     */
     public function index(): View
     {
         return $this->view->make('admin.nests.index', [
@@ -50,32 +44,21 @@ class NestController extends Controller
         ]);
     }
 
-    /**
-     * Render nest creation page.
-     */
     public function create(): View
     {
         return $this->view->make('admin.nests.new');
     }
 
-    /**
-     * Handle the storage of a new nest.
-     *
-     * @throws \Pterodactyl\Exceptions\Model\DataValidationException
-     */
     public function store(StoreNestFormRequest $request): RedirectResponse
     {
         $nest = $this->nestCreationService->handle($request->normalize());
-        $this->alert->success(trans('admin/nests.notices.created', ['name' => htmlspecialchars($nest->name)]))->flash();
+        $this->alert->success(trans('admin/nests.notices.created', [
+            'name' => htmlspecialchars($nest->name),
+        ]))->flash();
 
         return redirect()->route('admin.nests.view', $nest->id);
     }
 
-    /**
-     * Return details about a nest including all the eggs and servers per egg.
-     *
-     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
-     */
     public function view(int $nest): View
     {
         return $this->view->make('admin.nests.view', [
@@ -83,12 +66,6 @@ class NestController extends Controller
         ]);
     }
 
-    /**
-     * Handle request to update a nest.
-     *
-     * @throws \Pterodactyl\Exceptions\Model\DataValidationException
-     * @throws \Pterodactyl\Exceptions\Repository\RecordNotFoundException
-     */
     public function update(StoreNestFormRequest $request, int $nest): RedirectResponse
     {
         $this->nestUpdateService->handle($nest, $request->normalize());
@@ -97,11 +74,6 @@ class NestController extends Controller
         return redirect()->route('admin.nests.view', $nest);
     }
 
-    /**
-     * Handle request to delete a nest.
-     *
-     * @throws \Pterodactyl\Exceptions\Service\HasActiveServersException
-     */
     public function destroy(int $nest): RedirectResponse
     {
         $this->nestDeletionService->handle($nest);
@@ -110,11 +82,16 @@ class NestController extends Controller
         return redirect()->route('admin.nests');
     }
 }
-
 EOF
 
 chmod 644 "$REMOTE_PATH"
 
-echo "✅ Menghapus Proteksi Anti Akses Nest berhasil di hapus!"
+# Bersihkan cache Laravel agar perubahan langsung aktif
+cd /var/www/pterodactyl || exit
+php artisan view:clear >/dev/null 2>&1
+php artisan route:clear >/dev/null 2>&1
+php artisan config:clear >/dev/null 2>&1
+
+echo "✅ Proteksi Anti Akses Nest & Egg berhasil dihapus"
 echo "📂 Lokasi file: $REMOTE_PATH"
-echo "🔒 Berhasil 100%."
+echo "🔓 Semua admin kini bisa mengakses Nest & Egg"
